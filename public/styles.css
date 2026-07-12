@@ -244,6 +244,7 @@ main { padding: 28px 24px 40px; }
 .line-label {
   position: absolute;
   top: -12px;
+  z-index: 2; /* above the drag hit-area ::after */
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -274,17 +275,37 @@ main { padding: 28px 24px 40px; }
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
-/* editable label affordance */
-.line-label.editable { cursor: text; }
+/* editable label affordance: click to open an input */
+.line-label.editable { cursor: pointer; }
 .line-label.editable:hover { filter: brightness(1.12); }
-.line-label.editable:focus {
+.line-label.editable::after {
+  content: " ✎";
+  font-size: 10px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+.line-label.editing-label {
+  padding: 2px 6px;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+.line-label.editing-label::after { content: none; }
+.line-label-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  width: 12em;
+  max-width: 40vw;
+  padding: 0;
 }
 /* delete handle for custom lines (edit mode only) */
 .line-del {
   position: absolute;
   left: 4px;
   top: -13px;
+  z-index: 2;
   transform: translateX(-100%);
   width: 18px; height: 18px;
   display: flex; align-items: center; justify-content: center;
@@ -399,6 +420,26 @@ body.editing .block.dragging {
 }
 .tier-prod .block-tag { background: rgba(52, 211, 153, 0.14); border-color: rgba(52, 211, 153, 0.25); color: #a7f3d6; }
 
+/* Hover tip for latest comment */
+.block-tip {
+  position: fixed;
+  z-index: 150;
+  max-width: min(280px, 70vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(18, 22, 38, 0.96);
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 /* ---------- Panel ---------- */
 .panel {
   position: fixed;
@@ -510,6 +551,36 @@ body.editing .block.dragging {
 }
 .tag-remove:hover { color: #fff; }
 .tag-add { margin-top: 10px; }
+.tag-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  align-items: center;
+}
+.tag-suggestions-label {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+.tag-suggest {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: 1px dashed rgba(109, 139, 255, 0.4);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #a8b6ef;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+.tag-suggest:hover {
+  background: var(--accent-soft);
+  border-style: solid;
+  border-color: rgba(109, 139, 255, 0.45);
+  color: #c5d0ff;
+}
 .tag-add input, .comment-add textarea {
   width: 100%;
   background: var(--surface);
@@ -548,6 +619,8 @@ body.editing .block.dragging {
 }
 .comment-edit-btn { cursor: pointer; color: var(--accent); font-weight: 600; }
 .comment-edit-btn:hover { text-decoration: underline; }
+.comment-del-btn { cursor: pointer; color: var(--danger); font-weight: 600; }
+.comment-del-btn:hover { text-decoration: underline; }
 .comment-textarea {
   width: 100%;
   background: var(--surface);
@@ -588,20 +661,57 @@ body.editing .block.dragging {
   animation: panelIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .modal-box h2 { margin: 0 0 18px; font-size: 18px; font-weight: 700; }
-.modal-box input {
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.modal-box .password-field input {
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
-  padding: 11px 13px;
+  padding: 11px 42px 11px 13px;
   font-size: 15px;
   font-family: inherit;
   transition: border-color 0.16s;
 }
-.modal-box input:focus { outline: none; border-color: var(--accent); }
+.modal-box .password-field input:focus { outline: none; border-color: var(--accent); }
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 0;
+}
+.password-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .login-error { color: var(--danger); font-size: 13px; margin-top: 10px; }
+.login-error.shake { animation: loginShake 0.35s ease; }
+@keyframes loginShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-primary:disabled:hover { filter: none; }
 
 [hidden] { display: none !important; }
 

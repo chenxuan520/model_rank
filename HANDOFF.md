@@ -4,7 +4,7 @@
 
 ## 0. 一句话现状
 
-个人主观大模型测评榜。默认只读，输密码进编辑态可增删/拖动模型、拖动多条基准线、打标签、写评论。已上线 Cloudflare Pages。**本次会话有一批改动已提交并推送到 git，但尚未部署到线上**（见 §3）。
+个人主观大模型测评榜。默认只读，输密码进编辑态可增删/拖动模型、拖动多条基准线、打标签、写评论。已上线 Cloudflare Pages。**HANDOFF §6 的 3 项待办已完成**；本地改动尚未 commit / 部署（见 §3）。
 
 ## 1. 关键坐标
 
@@ -28,8 +28,8 @@ git config user.email  # 1607772321@qq.com
 
 ## 3. 部署状态（务必留意）
 
-- 线上当前跑的是 commit `867c026`（极光背景 + 段位配色 + 品牌图标），**不含**本次会话的「hero 大标题 / 多基准线 / 图标下拉框」。
-- 本次会话的改动已 commit + push 到 git，但**没有 `wrangler pages deploy`**。原因：多基准线/评论等功能仍有未完成项（见 §6），不适合直接上线。
+- 线上当前跑的是 commit `867c026`（极光背景 + 段位配色 + 品牌图标），**不含**「hero 大标题 / 多基准线 / 图标下拉框」及后续 §6 三项补全。
+- git 上已有 hero/多基准线等改动；§6 三项（删图标 / 点击编辑标签 / 评论删除）是本地未 commit 的后续补全。功能已齐，部署前需先 commit。
 - 想部署时执行（Direct Upload，GitHub 不自动触发部署）：
   ```bash
   npx wrangler pages deploy public --project-name=model-rank --commit-dirty=true
@@ -84,35 +84,28 @@ wrangler.jsonc # name / pages_build_output_dir=public / kv_namespaces
 ### 前端关键函数（`public/app.js`）
 - `render()` -> `renderBlocks()` / `renderLine()` / `renderCustomLines()`
 - `startLineDrag(e, getY, setY, onMove)`：生产线和自定义线共用的拖拽逻辑
+- `startLabelEdit(labelEl, getValue, setValue)`：点击标签 → 内联 input 改名（Enter/失焦保存，Esc 取消）
 - `applyTier()/refreshTiers()`：按是否在生产线以上给方块上色（绿=可上生产）
 - 图标：`BRAND_MAP`（名字关键词->图标）、`ICON_OPTIONS`（下拉框选项）、`iconUrl()`、`makeIcon()`、`letterAvatar()`（兜底彩色首字母）
 - 面板图标下拉：`syncLogoControls()` + `#panelLogoSelect` change 事件 + `#panelLogoInput`(自定义URL)
 
 ## 6. 未完成 / 待办（用户明确提出，按优先级）
 
-1. **删除「Microsoft / Phi」和「NVIDIA」两个内置图标**
-   - 参考本次删 Mistral / Hugging Face 的做法：删 `public/icons/microsoft-icon.svg`、`public/icons/nvidia-mark.svg`；从 `app.js` 的 `BRAND_MAP` 和 `ICON_OPTIONS` 移除对应项（BRAND_MAP 里 `phi/copilot/nvidia/nemotron` 几行）。
+> 以下 3 项已在后续会话完成（2026-07-12）：
+> 1. 已删除 Microsoft / Phi、NVIDIA 图标及相关 `BRAND_MAP` / `ICON_OPTIONS` 项
+> 2. 基准线标签改为「点击编辑」：编辑态标签旁显示 ✎，点击后变为 input，Enter/失焦保存，Esc 取消
+> 3. 评论在编辑态增加「删除」按钮，删后 `scheduleSave()`
 
-2. **基准线改名难发现 → 改成「点击编辑」交互**
-   - 现状：线的文字标签是内联 `contentEditable`，用户反馈“找不到怎么改名”。
-   - 期望：显式的编辑入口（例如点标签弹出输入，或标签旁加“编辑”小按钮），不要纯靠内联可编辑。
-   - 相关代码：`renderCustomLines()` 里的 `.custom-line-label`，以及生产线 `.prod-line-label` 的 `input` 事件。
-
-3. **评论要能删除**
-   - 现状：评论只能新增（`commentAddBtn`）和编辑（`startEditComment`），**没有删除**。
-   - 期望：每条评论在编辑态显示删除按钮，删掉后 `scheduleSave()`。
-   - 相关代码：`renderComments()`（在 meta 行里，编辑态除了“编辑”再加“删除”）。
-
-> 说明：以上 3 项本次会话**未做**。第 1 项最简单，2/3 项涉及交互。
+当前无未完成的用户待办。
 
 ## 7. 当前内置图标清单（`public/icons/`）
 
 openai-icon, claude-icon, anthropic-icon, gemini-star, meta-icon, deepseek-icon,
-grok-icon, qwen-icon, kimi, doubao, glm, microsoft-icon(待删), nvidia-mark(待删), cursor
+grok-icon, qwen-icon, kimi, doubao, glm, cursor
 
-- 图标来源：Iconify `logos`/`simple-icons` 的方形变体，本地托管（不依赖运行时 CDN）。
-- Kimi / 豆包 / GLM 无可靠彩色方形官方 logo，用品牌色+首字/缩写做的**原创方块**（非商标复制）。若拿到官方 SVG 可直接替换同名文件。
-- 找新图标：`curl "https://api.iconify.design/logos/<slug>.svg"`（单条测；注意 zsh 下 for 循环里连着 head 管道可能报 curl not found，逐条 curl 即可）。优先选方形 `-icon` 变体，宽的 wordmark 在小方块里会被压扁。
+- 图标来源：Iconify `logos`/`simple-icons` 的方形变体，本地托管（不依赖运行时 CDN）。豆包 / GLM 用 lobe-icons 的彩色 path SVG（原先用 `<text>` 当 `<img>` 会渲不出字体）。
+- Kimi 暂无可靠彩色方形官方 logo，用品牌色+首字做的**原创方块**（非商标复制）。若拿到官方 SVG 可直接替换同名文件。
+- 找新图标：`curl "https://api.iconify.design/logos/<slug>.svg"`（单条测；注意 zsh 下 for 循环里连着 head 管道可能报 curl not found，逐条 curl 即可）。优先选方形 `-icon` 变体，宽的 wordmark 在小方块里会被压扁。也可从 `@lobehub/icons-static-svg`（jsdelivr）取 AI 品牌色标。
 
 ## 8. 约定与坑
 
