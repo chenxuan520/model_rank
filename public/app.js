@@ -770,6 +770,15 @@ document.getElementById("deleteModelBtn").addEventListener("click", () => {
 
 document.getElementById("panelClose").addEventListener("click", closePanel);
 
+// Click outside the side panel to close it (blocks are excluded: they switch/open panel).
+document.addEventListener("pointerdown", (e) => {
+  if (panel.hidden) return;
+  if (panel.contains(e.target)) return;
+  if (e.target.closest(".block")) return;
+  if (e.target.closest("#loginModal")) return;
+  closePanel();
+});
+
 // ---------- Add model ----------
 document.getElementById("addBtn").addEventListener("click", () => {
   const now = Date.now();
@@ -858,6 +867,11 @@ loginCancel.addEventListener("click", closeLoginModal);
 loginSubmit.addEventListener("click", doLogin);
 passwordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") doLogin();
+});
+
+// Click the dimmed backdrop to dismiss the login modal
+loginModal.addEventListener("pointerdown", (e) => {
+  if (e.target === loginModal) closeLoginModal();
 });
 
 // Esc closes login modal (priority) or side panel
