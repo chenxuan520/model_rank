@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "model-rank",
+  "compatibility_date": "2025-07-01",
+  "pages_build_output_dir": "public",
+  "kv_namespaces": [
+    {
+      "binding": "MODEL_RANK_KV",
+      "id": "REPLACE_WITH_KV_ID"
+    }
+  ]
+}

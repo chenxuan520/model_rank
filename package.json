@@ -1,0 +1,13 @@
+{
+  "name": "model_rank",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal subjective LLM ranking board",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.37.0"
+  }
+}
