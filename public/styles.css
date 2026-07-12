@@ -245,6 +245,9 @@ main { padding: 28px 24px 40px; }
   position: absolute;
   top: -12px;
   z-index: 2; /* above the drag hit-area ::after */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -252,6 +255,10 @@ main { padding: 28px 24px 40px; }
   border-radius: 20px;
   white-space: nowrap;
   outline: none;
+}
+.line-label-text {
+  display: inline-block;
+  min-width: 0;
 }
 /* main production line: red chip on the right */
 .prod-line-label {
@@ -318,26 +325,26 @@ main { padding: 28px 24px 40px; }
 }
 .line-del:hover { background: var(--danger); }
 
-/* color picker for production / custom lines (edit mode) */
+/* color swatch lives inside the label chip (edit mode only) */
 .line-color {
-  position: absolute;
-  top: 6px;
-  width: 22px;
-  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  margin: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  z-index: 3;
+  flex-shrink: 0;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
 }
 .line-color::-webkit-color-swatch-wrapper { padding: 0; }
 .line-color::-webkit-color-swatch { border: none; border-radius: 50%; }
 .line-color::-moz-color-swatch { border: none; border-radius: 50%; }
-.prod-line--main .line-color { right: 14px; }
-.custom-line .line-color { left: 14px; }
+.line-color:hover { filter: brightness(1.15); }
 
 body.editing .prod-line { cursor: ns-resize; }
 body.editing .prod-line--main { border-top-style: solid; }

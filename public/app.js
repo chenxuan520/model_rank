@@ -89,6 +89,29 @@ function makeLineColorInput(color, onChange) {
   return input;
 }
 
+// Keep color swatch + text span inside the chip; never wipe via textContent.
+function setLineLabelText(labelEl, text) {
+  let textEl = labelEl.querySelector(".line-label-text");
+  if (!textEl) {
+    const keep = [...labelEl.querySelectorAll(".line-color")];
+    labelEl.textContent = "";
+    keep.forEach((el) => labelEl.appendChild(el));
+    textEl = document.createElement("span");
+    textEl.className = "line-label-text";
+    labelEl.appendChild(textEl);
+  }
+  if (!textEl.querySelector(".line-label-input")) {
+    textEl.textContent = text;
+  }
+  return textEl;
+}
+
+function syncLineColorInput(labelEl, color, onChange) {
+  labelEl.querySelectorAll(".line-color").forEach((el) => el.remove());
+  if (!editing) return;
+  labelEl.prepend(makeLineColorInput(color, onChange));
+}
+
 function getModel(id) {
   return board.models.find((m) => m.id === id);
 }
@@ -391,37 +414,30 @@ function refreshTiers() {
 function renderLine() {
   prodLine.style.top = (1 - board.productionLineY) * 100 + "%";
   const label = prodLine.querySelector(".prod-line-label");
-  if (!label.querySelector("input")) {
-    label.textContent = board.productionLineLabel || "生产级别线";
-  }
+  setLineLabelText(label, board.productionLineLabel || "生产级别线");
   label.classList.toggle("editable", editing);
-  label.title = editing ? "点击编辑" : "";
+  label.title = editing ? "点击编辑文字；左侧改颜色" : "";
 
   const color = normalizeHexColor(board.productionLineColor, DEFAULT_PROD_COLOR);
   board.productionLineColor = color;
   applyLineColor(prodLine, label, color, true);
-
-  prodLine.querySelectorAll(".line-color").forEach((el) => el.remove());
-  if (editing) {
-    prodLine.appendChild(
-      makeLineColorInput(color, (v) => {
-        board.productionLineColor = v;
-        applyLineColor(prodLine, label, v, true);
-        scheduleSave();
-      })
-    );
-  }
+  syncLineColorInput(label, color, (v) => {
+    board.productionLineColor = v;
+    applyLineColor(prodLine, label, v, true);
+    scheduleSave();
+  });
 }
 
 // Click a line label → replace with an input (more discoverable than contentEditable).
 function startLabelEdit(labelEl, getValue, setValue) {
-  if (labelEl.querySelector("input")) return;
+  if (labelEl.querySelector(".line-label-input")) return;
+  const textEl = setLineLabelText(labelEl, getValue());
   const input = document.createElement("input");
   input.type = "text";
   input.className = "line-label-input";
   input.value = getValue();
-  labelEl.textContent = "";
-  labelEl.appendChild(input);
+  textEl.textContent = "";
+  textEl.appendChild(input);
   labelEl.classList.add("editing-label");
   input.focus();
   input.select();
@@ -435,7 +451,7 @@ function startLabelEdit(labelEl, getValue, setValue) {
       if (v) setValue(v);
     }
     labelEl.classList.remove("editing-label");
-    labelEl.textContent = getValue();
+    setLineLabelText(labelEl, getValue());
   };
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
@@ -458,11 +474,12 @@ function renderCustomLines() {
 
     const label = document.createElement("span");
     label.className = "line-label custom-line-label";
-    label.textContent = ln.label || "基准线";
+    setLineLabelText(label, ln.label || "基准线");
     label.classList.toggle("editable", editing);
     if (editing) {
-      label.title = "点击编辑";
+      label.title = "点击编辑文字；左侧改颜色";
       label.addEventListener("click", (ev) => {
+        if (ev.target.closest(".line-color")) return;
         ev.stopPropagation();
         startLabelEdit(
           label,
@@ -476,6 +493,11 @@ function renderCustomLines() {
     }
     el.appendChild(label);
     applyLineColor(el, label, color, false);
+    syncLineColorInput(label, color, (v) => {
+      ln.color = v;
+      applyLineColor(el, label, v, false);
+      scheduleSave();
+    });
 
     if (editing) {
       const del = document.createElement("span");
@@ -489,13 +511,6 @@ function renderCustomLines() {
         scheduleSave();
       });
       el.appendChild(del);
-      el.appendChild(
-        makeLineColorInput(color, (v) => {
-          ln.color = v;
-          applyLineColor(el, label, v, false);
-          scheduleSave();
-        })
-      );
     }
 
     el.addEventListener("pointerdown", (ev) => {
@@ -610,6 +625,7 @@ prodLine.addEventListener("pointerdown", (e) => {
 const prodLabel = prodLine.querySelector(".prod-line-label");
 prodLabel.addEventListener("click", (ev) => {
   if (!editing) return;
+  if (ev.target.closest(".line-color")) return;
   ev.stopPropagation();
   startLabelEdit(
     prodLabel,
