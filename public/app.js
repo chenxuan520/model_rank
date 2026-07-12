@@ -54,40 +54,63 @@ function allBoardTags() {
 const ICON_BASE = "icons/";
 
 // keyword (lowercased, matched as substring) -> local icon file (no extension)
+// Keep more-specific tokens above short ones to reduce false hits.
 const BRAND_MAP = [
-  ["gpt", "openai-icon"],
+  // OpenAI
+  ["chatgpt", "openai-icon"],
   ["openai", "openai-icon"],
+  ["codex", "openai-icon"],
+  ["gpt", "openai-icon"],
   ["o1", "openai-icon"],
   ["o3", "openai-icon"],
-  ["chatgpt", "openai-icon"],
-  ["claude", "claude-icon"],
+  ["o4", "openai-icon"],
+  // Anthropic / Claude
   ["anthropic", "anthropic-icon"],
-  ["opus", "claude-icon"],
+  ["claude", "claude-icon"],
   ["sonnet", "claude-icon"],
+  ["opus", "claude-icon"],
   ["haiku", "claude-icon"],
   ["mythos", "claude-icon"],
   ["fable", "claude-icon"],
+  // Google
   ["gemini", "gemini-star"],
+  ["gemma", "gemini-star"],
   ["palm", "gemini-star"],
   ["google", "gemini-star"],
+  // Meta
   ["llama", "meta-icon"],
   ["meta", "meta-icon"],
+  // DeepSeek
   ["deepseek", "deepseek-icon"],
+  // xAI
   ["grok", "grok-icon"],
+  ["xai", "grok-icon"],
+  // Alibaba Qwen
   ["qwen", "qwen-icon"],
+  ["qwq", "qwen-icon"],
+  ["tongyi", "qwen-icon"],
   ["通义", "qwen-icon"],
   ["千问", "qwen-icon"],
-  ["kimi", "kimi"],
+  // Moonshot Kimi
   ["moonshot", "kimi"],
+  ["kimi", "kimi"],
   ["月之暗面", "kimi"],
+  // ByteDance Doubao / Seed
+  ["seedance", "doubao"],
+  ["seedream", "doubao"],
+  ["seededit", "doubao"],
+  ["skylark", "doubao"],
   ["doubao", "doubao"],
   ["豆包", "doubao"],
-  ["glm", "glm"],
+  ["seed", "doubao"],
+  // Zhipu / Z.ai / GLM
   ["chatglm", "glm"],
   ["zhipu", "glm"],
   ["智谱", "glm"],
-  ["zai", "glm"],
   ["z.ai", "glm"],
+  ["zai", "glm"],
+  ["glm", "glm"],
+  // Cursor
   ["cursor", "cursor"],
 ];
 
@@ -105,7 +128,7 @@ const ICON_OPTIONS = [
   ["grok-icon", "Grok / xAI"],
   ["qwen-icon", "Qwen 通义千问"],
   ["kimi", "Kimi 月之暗面"],
-  ["doubao", "豆包 Doubao"],
+  ["doubao", "豆包 / Seed"],
   ["glm", "GLM / 智谱 / Z.ai"],
   ["cursor", "Cursor"],
 ];
@@ -164,6 +187,17 @@ async function load() {
   if (typeof board.productionLineLabel !== "string") board.productionLineLabel = "生产级别线";
   if (!Array.isArray(board.lines)) board.lines = [];
   render();
+  await restoreSession();
+}
+
+// If the HttpOnly auth cookie is still valid, re-enter edit mode without retyping password.
+async function restoreSession() {
+  try {
+    const res = await fetch("/api/auth", { credentials: "same-origin" });
+    if (res.ok) setEditing(true);
+  } catch {
+    // stay read-only
+  }
 }
 
 // ---------- Save (debounced) ----------
@@ -910,6 +944,7 @@ async function doLogin() {
     const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ password: pw }),
     });
     if (res.ok) {
@@ -935,7 +970,7 @@ async function doLogin() {
 }
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
-  await fetch("/api/logout", { method: "POST" });
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
   setEditing(false);
 });
 

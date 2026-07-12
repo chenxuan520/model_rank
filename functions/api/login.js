@@ -20,22 +20,21 @@ export async function onRequestPost({ request, env }) {
   }
 
   const token = await deriveToken(env.EDIT_PASSWORD);
-  const cookie = [
-    `token=${token}`,
-    "HttpOnly",
-    "Secure",
-    "SameSite=Strict",
-    "Path=/",
-    "Max-Age=2592000", // 30 days
-  ].join("; ");
-
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Set-Cookie": cookie,
+      "Set-Cookie": buildAuthCookie(token, request, 2592000),
     },
   });
+}
+
+function buildAuthCookie(token, request, maxAge) {
+  const secure = new URL(request.url).protocol === "https:";
+  const parts = [`token=${token}`, "HttpOnly"];
+  if (secure) parts.push("Secure");
+  parts.push("SameSite=Lax", "Path=/", `Max-Age=${maxAge}`);
+  return parts.join("; ");
 }
 
 function json(obj, status = 200) {
