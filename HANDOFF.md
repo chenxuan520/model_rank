@@ -65,21 +65,33 @@ wrangler.jsonc # name / pages_build_output_dir=public / kv_namespaces
 ### 数据结构（KV 单 key `board`，整份 JSON）
 ```jsonc
 {
-  "productionLineY": 0.6,            // 生产线高度 0~1
-  "productionLineLabel": "生产级别线", // 生产线文字（本次新增，可编辑）
-  "lines": [                          // 自由基准线数组（本次新增）
-    { "id": "l_xxx", "y": 0.45, "label": "第一梯队基准线" }
-  ],
-  "models": [
-    { "id": "m_xxx", "name": "GPT-X", "logo": "",
-      "x": 0.3, "y": 0.82, "tags": ["代码强"],
-      "comments": [ { "id":"c1","text":"...","createdAt":0,"updatedAt":0 } ] }
+  "activeId": "b_xxx",
+  "boards": [
+    {
+      "id": "b_xxx",
+      "name": "默认榜",
+      "productionLineY": 0.6,
+      "productionLineLabel": "生产级别线",
+      "productionLineColor": "#ff5b6a",
+      "lines": [ { "id": "l_xxx", "y": 0.45, "label": "第一梯队基准线", "color": "#8caaff" } ],
+      "models": [
+        { "id": "m_xxx", "name": "GPT-X", "logo": "", "released": "2025-03", "hideName": false,
+          "x": 0.3, "y": 0.82, "tags": ["代码强"],
+          "comments": [ { "id":"c1","text":"...","createdAt":0,"updatedAt":0 } ] }
+      ]
+    }
   ]
 }
 ```
-- 坐标全部 **0~1 相对值**；渲染时 `top=(1-y)*高`。`y` 越大越靠上=越强。
+- **向后兼容**：老数据若是单份 board（顶层有 `models`），GET/PUT 时自动包成 `{ activeId, boards:[...] }`。
+- 新建榜单默认**空白**（只有生产线，无模型/无自定义线）。
+- 坐标全部 **0~1 相对值**；渲染时 `left=x*宽`，`top=(1-y)*高`。
+- **纵轴 y = 能力强度**：`y` 越大越靠上=越强。
+- **横轴 x**：暂无语义（自由摆放）；价格轴先不做。
 - `logo` 字段：空=按名字自动识别；内置 slug（如 `deepseek-icon`）=指定内置图标；`http(s)://` 或 `data:` =自定义图片。
-- **向后兼容**：`load()` 里对老数据补 `productionLineLabel` / `lines`；后端 `sanitize()` 也会补默认值。
+- `released` 字段：可选，`YYYY-MM` 发布月份；空字符串=未设置。
+- `hideName` 字段：可选，`true` 时榜上方块只显示图标（悬停仍可见名字）；缺省 `false`。
+- **向后兼容字段**：`load()` / `sanitize()` 补 `productionLineLabel` / `lines` / `released` / `hideName` / 多榜单包装。
 
 ### 前端关键函数（`public/app.js`）
 - `render()` -> `renderBlocks()` / `renderLine()` / `renderCustomLines()`

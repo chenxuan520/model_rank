@@ -107,7 +107,7 @@ body::after {
 
 /* ---------- Hero ---------- */
 .hero {
-  max-width: 1180px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 30px 4px 22px;
   text-align: center;
@@ -143,7 +143,25 @@ body::after {
   color: var(--text-dim);
   font-weight: 500;
 }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.board-select {
+  max-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 28px 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%239096a6' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.board-select:focus { outline: none; border-color: var(--accent); }
+.board-select option { background: #14161e; color: var(--text); }
 .save-status {
   font-size: 12.5px;
   color: var(--text-dim);
@@ -180,7 +198,7 @@ main { padding: 28px 24px 40px; }
 .board {
   position: relative;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 .board-inner {
@@ -196,7 +214,7 @@ main { padding: 28px 24px 40px; }
     linear-gradient(180deg, #12141d 0%, #0c0d14 100%);
   box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-/* faint horizontal reference gridlines */
+/* faint horizontal reference grid (能力) */
 .board-inner::before {
   content: "";
   position: absolute;
@@ -211,23 +229,65 @@ main { padding: 28px 24px 40px; }
   pointer-events: none;
 }
 
-.axis-label {
+/* Y axis only for now (能力); price X-axis deferred */
+.axes {
   position: absolute;
-  left: 14px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  color: var(--text-faint);
+  inset: 0;
   pointer-events: none;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
-.axis-top { top: 12px; }
-.axis-top::before { content: "▲"; font-size: 8px; color: var(--prod); }
-.axis-bottom { bottom: 12px; }
-.axis-bottom::before { content: "▼"; font-size: 8px; color: var(--line); }
+.axis-y {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid rgba(238, 240, 246, 0.45);
+}
+.axis-y::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid rgba(238, 240, 246, 0.55);
+}
+.axis-caption {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+/* upright vertical Chinese: 能 above 力, not sideways */
+.axis-y-caption {
+  left: 6px;
+  top: 50%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  letter-spacing: 0.35em;
+}
+.axis-end {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+.axis-y-high {
+  left: 10px;
+  top: 8px;
+  color: var(--prod);
+}
+.axis-y-low {
+  left: 10px;
+  bottom: 10px;
+  color: var(--line);
+}
 
 /* Production line + custom baseline lines */
 .prod-line {
@@ -380,11 +440,30 @@ body.editing .prod-line::after {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
 }
 body.editing .block { cursor: grab; }
+body.editing .block.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(109, 139, 255, 0.35), 0 0 18px rgba(109, 139, 255, 0.25);
+}
 body.editing .block.dragging {
   cursor: grabbing;
   z-index: 30;
   transform: translate(-50%, -50%) scale(1.06);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+body.editing .board-inner {
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+.marquee {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  border: 1px solid rgba(109, 139, 255, 0.9);
+  background: rgba(109, 139, 255, 0.16);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 .block-head {
   display: flex;
@@ -408,6 +487,18 @@ body.editing .block.dragging {
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
+.block.icon-only {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 14px;
+}
+.block.icon-only .block-head { gap: 0; }
+.block.icon-only .block-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.block.icon-only .block-name { display: none; }
 
 /* Tier coloring driven by JS (above / below production line) */
 .block.tier-prod {
@@ -516,6 +607,31 @@ body.editing .block.dragging {
 }
 .panel-name { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
 .logo-hint { font-size: 11px; color: var(--text-faint); margin-top: 7px; line-height: 1.5; }
+.panel-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.panel-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.panel-released-view {
+  font-size: 14px;
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+.panel-released-view.is-empty { color: var(--text-faint); font-style: italic; }
+input[type="month"].panel-name-input {
+  color-scheme: dark;
+}
 .panel-name-input {
   width: 100%;
   background: var(--surface);
@@ -786,6 +902,11 @@ body.editing .block.dragging {
     justify-content: flex-end;
     margin-left: auto;
   }
+  .board-select {
+    max-width: 108px;
+    padding: 7px 22px 7px 8px;
+    font-size: 12px;
+  }
   .save-status {
     min-width: 0;
     font-size: 11px;
@@ -820,11 +941,9 @@ body.editing .block.dragging {
     min-height: 420px;
     border-radius: 14px;
   }
-  .axis-label {
-    left: 8px;
-    font-size: 10px;
-    letter-spacing: 1px;
-  }
+  .axis-y-caption { left: 4px; font-size: 11px; }
+  .axis-y-high { left: 8px; top: 6px; font-size: 9px; }
+  .axis-y-low { left: 8px; bottom: 8px; font-size: 9px; }
   .line-label {
     font-size: 10px;
     padding: 2px 8px;
@@ -920,7 +1039,6 @@ body.editing .block.dragging {
     min-height: 380px;
   }
   .block-tags { display: none; } /* reduce clutter on very small screens */
-  .axis-bottom, .axis-top { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 @media (hover: none) and (pointer: coarse) {

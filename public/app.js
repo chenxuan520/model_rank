@@ -1,7 +1,10 @@
 "use strict";
 
 // ---------- State ----------
+let store = { activeId: "", boards: [] };
 let board = {
+  id: "",
+  name: "默认榜",
   productionLineY: 0.6,
   productionLineLabel: "生产级别线",
   productionLineColor: "#ff5b6a",
@@ -9,7 +12,9 @@ let board = {
   models: [],
 };
 let editing = false;
-let selectedId = null;
+let selectedId = null; // panel-focused model
+let selectedIds = new Set(); // multi-select for group drag
+let modelClipboard = []; // in-memory copies for Ctrl/Cmd+C/V
 let saveTimer = null;
 
 const DEFAULT_PROD_COLOR = "#ff5b6a";
@@ -28,6 +33,18 @@ function uid(prefix) {
 
 function clamp01(n) {
   return Math.min(1, Math.max(0, n));
+}
+
+function normalizeMonth(s) {
+  if (typeof s !== "string") return "";
+  const m = s.trim().match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  return m ? m[1] + "-" + m[2] : "";
+}
+
+function formatReleased(ym) {
+  const m = normalizeMonth(ym).match(/^(\d{4})-(\d{2})$/);
+  if (!m) return "";
+  return m[1] + "年" + Number(m[2]) + "月";
 }
 
 function fmtTime(ts) {
@@ -180,6 +197,16 @@ const BRAND_MAP = [
   ["moonshot", "kimi"],
   ["kimi", "kimi"],
   ["月之暗面", "kimi"],
+  // MiniMax / Hailuo
+  ["minimax", "minimax"],
+  ["mini-max", "minimax"],
+  ["hailuo", "minimax"],
+  ["海螺", "minimax"],
+  // Xiaomi MiMo
+  ["xiaomimimo", "mimo"],
+  ["xiaomi", "mimo"],
+  ["小米", "mimo"],
+  ["mimo", "mimo"],
   // ByteDance Doubao / Seed
   ["seedance", "doubao"],
   ["seedream", "doubao"],
@@ -213,6 +240,8 @@ const ICON_OPTIONS = [
   ["grok-icon", "Grok / xAI"],
   ["qwen-icon", "Qwen 通义千问"],
   ["kimi", "Kimi 月之暗面"],
+  ["minimax", "MiniMax / 海螺"],
+  ["mimo", "MiMo / 小米"],
   ["doubao", "豆包 / Seed"],
   ["glm", "GLM / 智谱 / Z.ai"],
   ["cursor", "Cursor"],
@@ -265,16 +294,100 @@ function makeIcon(m, cls) {
 }
 
 // ---------- Load ----------
-async function load() {
-  const res = await fetch("/api/data");
-  board = await res.json();
-  // backward compat for boards saved before labeled lines / colors existed
-  if (typeof board.productionLineLabel !== "string") board.productionLineLabel = "生产级别线";
-  board.productionLineColor = normalizeHexColor(board.productionLineColor, DEFAULT_PROD_COLOR);
-  if (!Array.isArray(board.lines)) board.lines = [];
-  board.lines.forEach((ln, i) => {
+function emptyBoard(name) {
+  return {
+    id: uid("b_"),
+    name: (name || "新榜单").trim() || "新榜单",
+    productionLineY: 0.6,
+    productionLineLabel: "生产级别线",
+    productionLineColor: DEFAULT_PROD_COLOR,
+    lines: [],
+    models: [],
+  };
+}
+
+function normalizeClientStore(data) {
+  if (data && Array.isArray(data.boards) && data.boards.length) {
+    return {
+      activeId: data.activeId,
+      boards: data.boards,
+    };
+  }
+  // legacy single-board payload
+  if (data && Array.isArray(data.models)) {
+    const one = {
+      id: data.id || "b_default",
+      name: data.name || "默认榜",
+      productionLineY: data.productionLineY,
+      productionLineLabel: data.productionLineLabel,
+      productionLineColor: data.productionLineColor,
+      lines: data.lines,
+      models: data.models,
+    };
+    return { activeId: one.id, boards: [one] };
+  }
+  const one = emptyBoard("默认榜");
+  return { activeId: one.id, boards: [one] };
+}
+
+function hydrateBoard(b) {
+  if (typeof b.productionLineLabel !== "string") b.productionLineLabel = "生产级别线";
+  b.productionLineColor = normalizeHexColor(b.productionLineColor, DEFAULT_PROD_COLOR);
+  if (!Array.isArray(b.lines)) b.lines = [];
+  b.lines.forEach((ln, i) => {
     ln.color = normalizeHexColor(ln.color, LINE_COLOR_PRESETS[i % LINE_COLOR_PRESETS.length]);
   });
+  if (!Array.isArray(b.models)) b.models = [];
+  for (const m of b.models) {
+    m.released = normalizeMonth(m.released);
+    m.hideName = !!m.hideName;
+  }
+  if (typeof b.name !== "string" || !b.name.trim()) b.name = "未命名榜单";
+  if (!b.id) b.id = uid("b_");
+}
+
+function activeBoard() {
+  return store.boards.find((b) => b.id === store.activeId) || store.boards[0] || null;
+}
+
+function setActiveBoard(id, { persist } = { persist: false }) {
+  if (!store.boards.some((b) => b.id === id)) return;
+  store.activeId = id;
+  board = activeBoard();
+  selectedId = null;
+  clearSelection();
+  closePanel();
+  hydrateBoard(board);
+  syncBoardSelect();
+  render();
+  if (persist && editing) scheduleSave();
+}
+
+function syncBoardSelect() {
+  const select = document.getElementById("boardSelect");
+  if (!select) return;
+  select.innerHTML = "";
+  for (const b of store.boards) {
+    const opt = document.createElement("option");
+    opt.value = b.id;
+    opt.textContent = b.name || "未命名榜单";
+    select.appendChild(opt);
+  }
+  select.value = store.activeId;
+  const delBtn = document.getElementById("deleteBoardBtn");
+  if (delBtn) delBtn.disabled = store.boards.length <= 1;
+}
+
+async function load() {
+  const res = await fetch("/api/data");
+  const data = await res.json();
+  store = normalizeClientStore(data);
+  if (!store.boards.some((b) => b.id === store.activeId)) {
+    store.activeId = store.boards[0].id;
+  }
+  board = activeBoard();
+  hydrateBoard(board);
+  syncBoardSelect();
   render();
   await restoreSession();
 }
@@ -302,7 +415,7 @@ async function save() {
     const res = await fetch("/api/data", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(board),
+      body: JSON.stringify(store),
     });
     if (res.status === 401) {
       saveStatus.textContent = "登录失效";
@@ -344,6 +457,10 @@ function renderBlocks() {
     name.textContent = m.name || "(未命名)";
     head.appendChild(name);
     el.appendChild(head);
+    if (m.hideName) {
+      el.classList.add("icon-only");
+      el.title = m.name || "(未命名)";
+    }
 
     if (m.tags && m.tags.length) {
       const tagWrap = document.createElement("div");
@@ -359,13 +476,14 @@ function renderBlocks() {
 
     el.addEventListener("pointerdown", onBlockPointerDown);
     el.addEventListener("pointerenter", () => {
-      if (drag) return;
+      if (drag || marquee) return;
       const c = latestComment(m);
       if (c) showBlockTip(el, c.text);
     });
     el.addEventListener("pointerleave", hideBlockTip);
     boardInner.appendChild(el);
   }
+  syncSelectionClass();
 }
 
 // ---------- Block hover tip (latest comment) ----------
@@ -527,64 +645,315 @@ function renderCustomLines() {
   }
 }
 
-// ---------- Block drag + click ----------
+// ---------- Selection + marquee + block drag ----------
 let drag = null;
+let marquee = null;
+
+function syncSelectionClass() {
+  boardInner.querySelectorAll(".block").forEach((el) => {
+    el.classList.toggle("selected", selectedIds.has(el.dataset.id));
+  });
+}
+
+function clearSelection() {
+  if (selectedIds.size === 0) return;
+  selectedIds.clear();
+  syncSelectionClass();
+}
+
+function setSelection(ids) {
+  selectedIds = new Set(ids);
+  syncSelectionClass();
+}
+
+function isTypingTarget(el) {
+  if (!el || el === document.body) return false;
+  const tag = (el.tagName || "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function idsForClipboard() {
+  if (selectedIds.size) return [...selectedIds];
+  if (selectedId) return [selectedId];
+  return [];
+}
+
+function snapshotModel(m) {
+  return {
+    name: m.name || "",
+    logo: m.logo || "",
+    released: normalizeMonth(m.released),
+    hideName: !!m.hideName,
+    x: typeof m.x === "number" ? m.x : 0.5,
+    y: typeof m.y === "number" ? m.y : 0.5,
+    tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+    comments: Array.isArray(m.comments)
+      ? m.comments.map((c) => ({
+          text: String(c.text || ""),
+          createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
+          updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : Date.now(),
+        }))
+      : [],
+  };
+}
+
+function materializeModel(snap, index) {
+  const ox = 0.05 + index * 0.02;
+  const oy = 0.05;
+  return {
+    id: uid("m_"),
+    name: snap.name || "新模型",
+    logo: snap.logo || "",
+    released: normalizeMonth(snap.released),
+    hideName: !!snap.hideName,
+    x: clamp01((typeof snap.x === "number" ? snap.x : 0.5) + ox),
+    y: clamp01((typeof snap.y === "number" ? snap.y : 0.5) + oy),
+    tags: Array.isArray(snap.tags) ? [...snap.tags] : [],
+    comments: Array.isArray(snap.comments)
+      ? snap.comments.map((c) => ({
+          id: uid("c_"),
+          text: String(c.text || ""),
+          createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
+          updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : Date.now(),
+        }))
+      : [],
+  };
+}
+
+function copySelectedModels() {
+  const ids = idsForClipboard();
+  const snaps = ids.map((id) => getModel(id)).filter(Boolean).map(snapshotModel);
+  if (!snaps.length) return false;
+  modelClipboard = snaps;
+  saveStatus.textContent = snaps.length > 1 ? `已复制 ${snaps.length} 个` : "已复制";
+  return true;
+}
+
+function pasteModels() {
+  if (!modelClipboard.length) return false;
+  const created = modelClipboard.map((snap, i) => materializeModel(snap, i));
+  board.models.push(...created);
+  setSelection(created.map((m) => m.id));
+  renderBlocks();
+  openPanel(created[created.length - 1].id);
+  scheduleSave();
+  saveStatus.textContent = created.length > 1 ? `已粘贴 ${created.length} 个` : "已粘贴";
+  return true;
+}
+
+function clientToBoard(clientX, clientY, rect) {
+  return {
+    x: (clientX - rect.left) / rect.width,
+    y: 1 - (clientY - rect.top) / rect.height,
+  };
+}
+
+function applyModelPos(id, x, y) {
+  const m = getModel(id);
+  const el = boardInner.querySelector(`.block[data-id="${CSS.escape(id)}"]`);
+  if (!m) return;
+  m.x = x;
+  m.y = y;
+  if (el) {
+    el.style.left = x * 100 + "%";
+    el.style.top = (1 - y) * 100 + "%";
+    applyTier(el, m);
+  }
+}
 
 function onBlockPointerDown(e) {
   hideBlockTip();
   const id = e.currentTarget.dataset.id;
   if (!editing) {
-    // read-only: treat as click to open panel
     openPanel(id);
     return;
   }
   e.preventDefault();
+  e.stopPropagation(); // don't start a marquee underneath
+
+  const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+  if (additive) {
+    if (selectedIds.has(id)) selectedIds.delete(id);
+    else selectedIds.add(id);
+    syncSelectionClass();
+  } else if (!selectedIds.has(id)) {
+    setSelection([id]);
+  }
+
+  if (!selectedIds.has(id)) {
+    // shift-deselected this block: no drag
+    return;
+  }
+
   const el = e.currentTarget;
+  const m = getModel(id);
   const rect = boardInner.getBoundingClientRect();
+  const pt = clientToBoard(e.clientX, e.clientY, rect);
+  const ids = [...selectedIds];
+  const origins = {};
+  for (const sid of ids) {
+    const sm = getModel(sid);
+    if (sm) origins[sid] = { x: sm.x, y: sm.y };
+  }
+
   drag = {
-    id,
-    el,
+    primaryId: id,
+    ids,
+    origins,
     rect,
     moved: false,
+    additive,
     startX: e.clientX,
     startY: e.clientY,
+    offX: pt.x - (m ? m.x : pt.x),
+    offY: pt.y - (m ? m.y : pt.y),
   };
   el.setPointerCapture(e.pointerId);
-  el.classList.add("dragging");
+  for (const sid of ids) {
+    boardInner.querySelector(`.block[data-id="${CSS.escape(sid)}"]`)?.classList.add("dragging");
+  }
   el.addEventListener("pointermove", onBlockPointerMove);
   el.addEventListener("pointerup", onBlockPointerUp);
 }
 
 function onBlockPointerMove(e) {
   if (!drag) return;
-  if (Math.abs(e.clientX - drag.startX) > 3 || Math.abs(e.clientY - drag.startY) > 3) {
+  if (!drag.moved) {
+    if (Math.abs(e.clientX - drag.startX) <= 3 && Math.abs(e.clientY - drag.startY) <= 3) {
+      return;
+    }
     drag.moved = true;
   }
-  const x = clamp01((e.clientX - drag.rect.left) / drag.rect.width);
-  const y = clamp01(1 - (e.clientY - drag.rect.top) / drag.rect.height);
-  drag.el.style.left = x * 100 + "%";
-  drag.el.style.top = (1 - y) * 100 + "%";
-  const m = getModel(drag.id);
-  if (m) {
-    m.x = x;
-    m.y = y;
-    applyTier(drag.el, m); // recolor live as it crosses the line
+
+  const pt = clientToBoard(e.clientX, e.clientY, drag.rect);
+  const primary = drag.origins[drag.primaryId];
+  if (!primary) return;
+
+  let dx = pt.x - drag.offX - primary.x;
+  let dy = pt.y - drag.offY - primary.y;
+
+  // keep the whole group inside 0~1
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const sid of drag.ids) {
+    const o = drag.origins[sid];
+    if (!o) continue;
+    minX = Math.min(minX, o.x + dx);
+    maxX = Math.max(maxX, o.x + dx);
+    minY = Math.min(minY, o.y + dy);
+    maxY = Math.max(maxY, o.y + dy);
+  }
+  if (minX < 0) dx -= minX;
+  if (maxX > 1) dx -= maxX - 1;
+  if (minY < 0) dy -= minY;
+  if (maxY > 1) dy -= maxY - 1;
+
+  for (const sid of drag.ids) {
+    const o = drag.origins[sid];
+    if (!o) continue;
+    applyModelPos(sid, clamp01(o.x + dx), clamp01(o.y + dy));
   }
 }
 
 function onBlockPointerUp(e) {
   if (!drag) return;
-  const { el, id, moved } = drag;
-  el.classList.remove("dragging");
+  const { ids, primaryId, moved, additive } = drag;
+  for (const sid of ids) {
+    boardInner.querySelector(`.block[data-id="${CSS.escape(sid)}"]`)?.classList.remove("dragging");
+  }
+  const el = e.currentTarget;
   el.removeEventListener("pointermove", onBlockPointerMove);
   el.removeEventListener("pointerup", onBlockPointerUp);
   drag = null;
   if (moved) {
     scheduleSave();
-  } else {
-    openPanel(id); // a tap without moving opens the panel
+  } else if (!additive) {
+    openPanel(primaryId);
   }
 }
+
+function onBoardMarqueeDown(e) {
+  if (!editing) return;
+  if (e.target.closest(".block, .prod-line, .line-label, .line-del, .line-color, .line-label-input")) return;
+  if (e.button != null && e.button !== 0) return;
+
+  e.preventDefault();
+  hideBlockTip();
+
+  const rect = boardInner.getBoundingClientRect();
+  const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+  const box = document.createElement("div");
+  box.className = "marquee";
+  boardInner.appendChild(box);
+
+  marquee = {
+    startX: e.clientX - rect.left,
+    startY: e.clientY - rect.top,
+    rect,
+    el: box,
+    additive,
+    base: additive ? new Set(selectedIds) : new Set(),
+    moved: false,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  };
+  if (!additive) clearSelection();
+
+  boardInner.setPointerCapture(e.pointerId);
+  boardInner.addEventListener("pointermove", onBoardMarqueeMove);
+  boardInner.addEventListener("pointerup", onBoardMarqueeUp);
+}
+
+function hitMarquee(left, top, w, h) {
+  const next = new Set(marquee.base);
+  const br = marquee.rect;
+  boardInner.querySelectorAll(".block").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    const bl = r.left - br.left;
+    const bt = r.top - br.top;
+    const brt = r.right - br.left;
+    const bb = r.bottom - br.top;
+    const hit = !(brt < left || bl > left + w || bb < top || bt > top + h);
+    if (hit) next.add(el.dataset.id);
+  });
+  selectedIds = next;
+  syncSelectionClass();
+}
+
+function onBoardMarqueeMove(e) {
+  if (!marquee) return;
+  if (!marquee.moved) {
+    if (Math.abs(e.clientX - marquee.startClientX) > 3 || Math.abs(e.clientY - marquee.startClientY) > 3) {
+      marquee.moved = true;
+    }
+  }
+  const x1 = e.clientX - marquee.rect.left;
+  const y1 = e.clientY - marquee.rect.top;
+  const left = Math.min(marquee.startX, x1);
+  const top = Math.min(marquee.startY, y1);
+  const w = Math.abs(x1 - marquee.startX);
+  const h = Math.abs(y1 - marquee.startY);
+  marquee.el.style.left = left + "px";
+  marquee.el.style.top = top + "px";
+  marquee.el.style.width = w + "px";
+  marquee.el.style.height = h + "px";
+  if (marquee.moved) hitMarquee(left, top, w, h);
+}
+
+function onBoardMarqueeUp() {
+  if (!marquee) return;
+  marquee.el.remove();
+  boardInner.removeEventListener("pointermove", onBoardMarqueeMove);
+  boardInner.removeEventListener("pointerup", onBoardMarqueeUp);
+  // empty click (no drag): clear selection already done for non-additive
+  marquee = null;
+}
+
+boardInner.addEventListener("pointerdown", onBoardMarqueeDown);
 
 // ---------- Line drag (shared by production line + custom lines) ----------
 // getY/setY read and write the line's y; onMove runs after each update.
@@ -647,11 +1016,28 @@ function openPanel(id) {
   const nameInput = document.getElementById("panelNameInput");
   nameInput.value = m.name || "";
   syncLogoControls(m);
+  syncReleased(m);
+  document.getElementById("panelHideName").checked = !!m.hideName;
   updatePanelIcon(m);
 
   renderTags(m);
   renderComments(m);
   panel.hidden = false;
+}
+
+// YYYY-MM release month: month picker in edit mode, plain text otherwise.
+function syncReleased(m) {
+  m.released = normalizeMonth(m.released);
+  const input = document.getElementById("panelReleased");
+  const view = document.getElementById("panelReleasedView");
+  input.value = m.released;
+  if (editing) {
+    view.hidden = true;
+  } else {
+    view.hidden = false;
+    view.textContent = m.released ? formatReleased(m.released) : "未设置";
+    view.classList.toggle("is-empty", !m.released);
+  }
 }
 
 // Set the icon dropdown + custom-URL field to reflect the model's current logo.
@@ -853,7 +1239,7 @@ document.getElementById("tagInput").addEventListener("keydown", (e) => {
 });
 
 // comment add
-document.getElementById("commentAddBtn").addEventListener("click", () => {
+function addCommentFromInput() {
   const m = getModel(selectedId);
   if (!m) return;
   const input = document.getElementById("commentInput");
@@ -863,6 +1249,28 @@ document.getElementById("commentAddBtn").addEventListener("click", () => {
   m.comments.push({ id: uid("c_"), text: v, createdAt: now, updatedAt: now });
   input.value = "";
   renderComments(m);
+  scheduleSave();
+}
+
+document.getElementById("commentAddBtn").addEventListener("click", addCommentFromInput);
+document.getElementById("commentInput").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  addCommentFromInput();
+});
+
+document.getElementById("panelReleased").addEventListener("change", (e) => {
+  const m = getModel(selectedId);
+  if (!m) return;
+  m.released = normalizeMonth(e.target.value);
+  scheduleSave();
+});
+
+document.getElementById("panelHideName").addEventListener("change", (e) => {
+  const m = getModel(selectedId);
+  if (!m) return;
+  m.hideName = !!e.target.checked;
+  renderBlocks();
   scheduleSave();
 });
 
@@ -912,6 +1320,7 @@ document.getElementById("deleteModelBtn").addEventListener("click", () => {
   if (!m) return;
   if (!confirm("确认删除模型「" + (m.name || "未命名") + "」？")) return;
   board.models = board.models.filter((x) => x.id !== selectedId);
+  selectedIds.delete(selectedId);
   closePanel();
   renderBlocks();
   scheduleSave();
@@ -935,6 +1344,8 @@ document.getElementById("addBtn").addEventListener("click", () => {
     id: uid("m_"),
     name: "新模型",
     logo: "",
+    released: "",
+    hideName: false,
     x: 0.5,
     y: 0.5,
     tags: [],
@@ -944,6 +1355,45 @@ document.getElementById("addBtn").addEventListener("click", () => {
   renderBlocks();
   openPanel(m.id);
   scheduleSave();
+});
+
+// ---------- Boards (multi-list) ----------
+document.getElementById("boardSelect").addEventListener("change", (e) => {
+  setActiveBoard(e.target.value, { persist: editing });
+});
+
+document.getElementById("addBoardBtn").addEventListener("click", () => {
+  if (!editing) return;
+  const name = prompt("新榜单名称", "新榜单");
+  if (name === null) return;
+  const b = emptyBoard(name);
+  store.boards.push(b);
+  setActiveBoard(b.id, { persist: true });
+  saveStatus.textContent = "已新建榜单";
+});
+
+document.getElementById("renameBoardBtn").addEventListener("click", () => {
+  if (!editing || !board) return;
+  const name = prompt("榜单名称", board.name || "未命名榜单");
+  if (name === null) return;
+  const v = name.trim();
+  if (!v) return;
+  board.name = v;
+  syncBoardSelect();
+  scheduleSave();
+});
+
+document.getElementById("deleteBoardBtn").addEventListener("click", () => {
+  if (!editing || !board) return;
+  if (store.boards.length <= 1) {
+    alert("至少保留一个榜单");
+    return;
+  }
+  if (!confirm("确认删除榜单「" + (board.name || "未命名") + "」？其中的模型也会一起删掉。")) return;
+  const doomed = board.id;
+  store.boards = store.boards.filter((b) => b.id !== doomed);
+  const next = store.boards[0];
+  setActiveBoard(next.id, { persist: true });
 });
 
 // ---------- Add baseline line ----------
@@ -961,6 +1411,7 @@ function setEditing(on) {
   document.querySelectorAll(".edit-only").forEach((el) => (el.hidden = !on));
   document.getElementById("loginBtn").hidden = on;
   saveStatus.textContent = "";
+  if (!on) clearSelection();
   renderLine();        // toggle production-line label editability
   renderCustomLines(); // toggle custom-line labels + delete buttons
   if (selectedId) openPanel(selectedId); // refresh panel edit controls
@@ -1021,14 +1472,32 @@ loginModal.addEventListener("pointerdown", (e) => {
   if (e.target === loginModal) closeLoginModal();
 });
 
-// Esc closes login modal (priority) or side panel
+// Esc / copy / paste shortcuts (edit mode)
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!loginModal.hidden) {
-    closeLoginModal();
+  if (e.key === "Escape") {
+    if (!loginModal.hidden) {
+      closeLoginModal();
+      return;
+    }
+    if (!panel.hidden) {
+      closePanel();
+      return;
+    }
+    clearSelection();
     return;
   }
-  if (!panel.hidden) closePanel();
+
+  if (!editing) return;
+  if (isTypingTarget(e.target)) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (!mod) return;
+
+  const key = e.key.toLowerCase();
+  if (key === "c") {
+    if (copySelectedModels()) e.preventDefault();
+  } else if (key === "v") {
+    if (pasteModels()) e.preventDefault();
+  }
 });
 
 async function doLogin() {

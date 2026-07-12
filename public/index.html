@@ -2,11 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>大模型测评榜</title>
   <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml" sizes="any" />
   <link rel="icon" href="/favicon-32.png?v=3" type="image/png" sizes="32x32" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
   <header class="topbar">
@@ -15,11 +15,15 @@
       <h1 class="title">大模型测评榜</h1>
     </div>
     <div class="topbar-right">
+      <select id="boardSelect" class="board-select" title="切换榜单" aria-label="切换榜单"></select>
       <span id="saveStatus" class="save-status"></span>
-      <button id="addLineBtn" class="btn edit-only" hidden>+ 基准线</button>
-      <button id="addBtn" class="btn edit-only" hidden>+ 添加模型</button>
+      <button id="addBoardBtn" class="btn edit-only" hidden><span class="btn-label">+ 榜单</span><span class="btn-label-sm">+榜</span></button>
+      <button id="renameBoardBtn" class="btn edit-only" hidden><span class="btn-label">重命名</span><span class="btn-label-sm">改名</span></button>
+      <button id="deleteBoardBtn" class="btn edit-only" hidden><span class="btn-label">删榜单</span><span class="btn-label-sm">删榜</span></button>
+      <button id="addLineBtn" class="btn edit-only" hidden><span class="btn-label">+ 基准线</span><span class="btn-label-sm">+线</span></button>
+      <button id="addBtn" class="btn edit-only" hidden><span class="btn-label">+ 添加模型</span><span class="btn-label-sm">+模型</span></button>
       <button id="loginBtn" class="btn">编辑</button>
-      <button id="logoutBtn" class="btn edit-only" hidden>退出编辑</button>
+      <button id="logoutBtn" class="btn edit-only" hidden><span class="btn-label">退出编辑</span><span class="btn-label-sm">退出</span></button>
     </div>
   </header>
 
@@ -33,8 +37,12 @@
     <!-- The board. Blocks and lines are absolutely positioned inside .board-inner. -->
     <div id="board" class="board">
       <div id="boardInner" class="board-inner">
-        <div class="axis-label axis-top">强 · S 段</div>
-        <div class="axis-label axis-bottom">弱 · 淘汰区</div>
+        <div class="axes" aria-hidden="true">
+          <div class="axis-y"></div>
+          <span class="axis-caption axis-y-caption">能力</span>
+          <span class="axis-end axis-y-high">↑ 强</span>
+          <span class="axis-end axis-y-low">弱</span>
+        </div>
         <!-- custom baseline lines injected here -->
         <div id="prodLine" class="prod-line prod-line--main">
           <span class="line-label prod-line-label"></span>
@@ -64,6 +72,17 @@
       </select>
       <input id="panelLogoInput" class="panel-name-input" placeholder="粘贴图片 URL" hidden />
       <div class="logo-hint">选“自动识别”会根据模型名匹配内置 logo；也可直接指定或填自定义图片。</div>
+      <label class="panel-check">
+        <input id="panelHideName" type="checkbox" />
+        <span>隐藏名称（榜上只显示图标）</span>
+      </label>
+    </section>
+
+    <section class="panel-section">
+      <h3>发布时间</h3>
+      <input id="panelReleased" class="panel-name-input edit-only" type="month" hidden />
+      <div id="panelReleasedView" class="panel-released-view"></div>
+      <div class="logo-hint edit-only" hidden>精确到月份即可，可留空。</div>
     </section>
 
     <section class="panel-section">
@@ -78,7 +97,7 @@
     <section class="panel-section">
       <h3>评论</h3>
       <div class="comment-add edit-only" hidden>
-        <textarea id="commentInput" placeholder="写一条新评论…"></textarea>
+        <textarea id="commentInput" placeholder="写一条新评论…（回车添加，Shift+回车换行）"></textarea>
         <button id="commentAddBtn" class="btn">添加评论</button>
       </div>
       <ol id="commentList" class="comment-list"></ol>
@@ -111,6 +130,7 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
+
