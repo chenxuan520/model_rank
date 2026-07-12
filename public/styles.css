@@ -696,6 +696,15 @@ body.editing .block.dragging {
   padding: 0;
 }
 .password-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.password-toggle .eye-off { display: none; }
+.password-toggle.is-shown .eye-open { display: none; }
+.password-toggle.is-shown .eye-off { display: block; }
+/* hide browser-native password reveal (otherwise two eyes) */
+.password-field input::-ms-reveal,
+.password-field input::-ms-clear,
+.password-field input::-webkit-credentials-auto-fill-button {
+  display: none !important;
+}
 .login-error { color: var(--danger); font-size: 13px; margin-top: 10px; }
 .login-error.shake { animation: loginShake 0.35s ease; }
 @keyframes loginShake {

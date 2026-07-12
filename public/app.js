@@ -828,8 +828,7 @@ let loginBusy = false;
 
 function resetPasswordVisibility() {
   passwordInput.type = "password";
-  passwordToggle.querySelector(".eye-open").hidden = false;
-  passwordToggle.querySelector(".eye-off").hidden = true;
+  passwordToggle.classList.remove("is-shown");
   passwordToggle.setAttribute("aria-label", "显示密码");
   passwordToggle.title = "显示密码";
 }
@@ -855,8 +854,7 @@ function closeLoginModal() {
 passwordToggle.addEventListener("click", () => {
   const show = passwordInput.type === "password";
   passwordInput.type = show ? "text" : "password";
-  passwordToggle.querySelector(".eye-open").hidden = show;
-  passwordToggle.querySelector(".eye-off").hidden = !show;
+  passwordToggle.classList.toggle("is-shown", show);
   passwordToggle.setAttribute("aria-label", show ? "隐藏密码" : "显示密码");
   passwordToggle.title = show ? "隐藏密码" : "显示密码";
   passwordInput.focus();
