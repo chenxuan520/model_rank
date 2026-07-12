@@ -1,10 +1,19 @@
 "use strict";
 
 // ---------- State ----------
-let board = { productionLineY: 0.6, productionLineLabel: "生产级别线", lines: [], models: [] };
+let board = {
+  productionLineY: 0.6,
+  productionLineLabel: "生产级别线",
+  productionLineColor: "#ff5b6a",
+  lines: [],
+  models: [],
+};
 let editing = false;
 let selectedId = null;
 let saveTimer = null;
+
+const DEFAULT_PROD_COLOR = "#ff5b6a";
+const LINE_COLOR_PRESETS = ["#8caaff", "#34d399", "#f59e0b", "#a78bfa", "#22d3ee", "#ec4899", "#f97316"];
 
 // ---------- DOM ----------
 const boardInner = document.getElementById("boardInner");
@@ -25,6 +34,59 @@ function fmtTime(ts) {
   const d = new Date(ts);
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function normalizeHexColor(c, fallback) {
+  if (typeof c !== "string") return fallback;
+  const s = c.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    return ("#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3]).toLowerCase();
+  }
+  return fallback;
+}
+
+function hexToRgba(hex, a) {
+  const h = normalizeHexColor(hex, "#ffffff").slice(1);
+  const n = parseInt(h, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+function nextLineColor() {
+  const used = new Set((board.lines || []).map((l) => normalizeHexColor(l.color, "").toLowerCase()));
+  return LINE_COLOR_PRESETS.find((c) => !used.has(c)) || LINE_COLOR_PRESETS[(board.lines || []).length % LINE_COLOR_PRESETS.length];
+}
+
+function applyLineColor(el, label, color, solidLabel) {
+  el.style.borderTopColor = color;
+  el.style.boxShadow = `0 0 14px ${hexToRgba(color, 0.45)}`;
+  if (!label) return;
+  if (solidLabel) {
+    label.style.background = `linear-gradient(135deg, ${hexToRgba(color, 0.92)}, ${color})`;
+    label.style.borderColor = "transparent";
+    label.style.color = "#fff";
+    label.style.boxShadow = `0 3px 12px ${hexToRgba(color, 0.45)}`;
+  } else {
+    label.style.background = hexToRgba(color, 0.2);
+    label.style.borderColor = hexToRgba(color, 0.6);
+    label.style.color = "#fff";
+    label.style.boxShadow = "none";
+  }
+}
+
+function makeLineColorInput(color, onChange) {
+  const input = document.createElement("input");
+  input.type = "color";
+  input.className = "line-color";
+  input.value = normalizeHexColor(color, "#8caaff");
+  input.title = "线条颜色";
+  input.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+  input.addEventListener("click", (ev) => ev.stopPropagation());
+  input.addEventListener("input", () => onChange(input.value));
+  return input;
 }
 
 function getModel(id) {
@@ -183,9 +245,13 @@ function makeIcon(m, cls) {
 async function load() {
   const res = await fetch("/api/data");
   board = await res.json();
-  // backward compat for boards saved before labeled lines existed
+  // backward compat for boards saved before labeled lines / colors existed
   if (typeof board.productionLineLabel !== "string") board.productionLineLabel = "生产级别线";
+  board.productionLineColor = normalizeHexColor(board.productionLineColor, DEFAULT_PROD_COLOR);
   if (!Array.isArray(board.lines)) board.lines = [];
+  board.lines.forEach((ln, i) => {
+    ln.color = normalizeHexColor(ln.color, LINE_COLOR_PRESETS[i % LINE_COLOR_PRESETS.length]);
+  });
   render();
   await restoreSession();
 }
@@ -330,6 +396,21 @@ function renderLine() {
   }
   label.classList.toggle("editable", editing);
   label.title = editing ? "点击编辑" : "";
+
+  const color = normalizeHexColor(board.productionLineColor, DEFAULT_PROD_COLOR);
+  board.productionLineColor = color;
+  applyLineColor(prodLine, label, color, true);
+
+  prodLine.querySelectorAll(".line-color").forEach((el) => el.remove());
+  if (editing) {
+    prodLine.appendChild(
+      makeLineColorInput(color, (v) => {
+        board.productionLineColor = v;
+        applyLineColor(prodLine, label, v, true);
+        scheduleSave();
+      })
+    );
+  }
 }
 
 // Click a line label → replace with an input (more discoverable than contentEditable).
@@ -372,6 +453,9 @@ function renderCustomLines() {
     el.dataset.id = ln.id;
     el.style.top = (1 - ln.y) * 100 + "%";
 
+    const color = normalizeHexColor(ln.color, nextLineColor());
+    ln.color = color;
+
     const label = document.createElement("span");
     label.className = "line-label custom-line-label";
     label.textContent = ln.label || "基准线";
@@ -391,6 +475,7 @@ function renderCustomLines() {
       });
     }
     el.appendChild(label);
+    applyLineColor(el, label, color, false);
 
     if (editing) {
       const del = document.createElement("span");
@@ -404,6 +489,13 @@ function renderCustomLines() {
         scheduleSave();
       });
       el.appendChild(del);
+      el.appendChild(
+        makeLineColorInput(color, (v) => {
+          ln.color = v;
+          applyLineColor(el, label, v, false);
+          scheduleSave();
+        })
+      );
     }
 
     el.addEventListener("pointerdown", (ev) => {
@@ -484,7 +576,7 @@ function onBlockPointerUp(e) {
 function startLineDrag(e, getY, setY, onMove) {
   if (!editing) return;
   // don't start a drag when interacting with the label / its input / delete btn
-  if (e.target.closest(".line-label, .line-del, .line-label-input")) return;
+  if (e.target.closest(".line-label, .line-del, .line-label-input, .line-color")) return;
   e.preventDefault();
   const rect = boardInner.getBoundingClientRect();
   const move = (ev) => {
@@ -840,7 +932,7 @@ document.getElementById("addBtn").addEventListener("click", () => {
 
 // ---------- Add baseline line ----------
 document.getElementById("addLineBtn").addEventListener("click", () => {
-  const ln = { id: uid("l_"), y: 0.4, label: "新基准线" };
+  const ln = { id: uid("l_"), y: 0.4, label: "新基准线", color: nextLineColor() };
   board.lines.push(ln);
   renderCustomLines();
   scheduleSave();
