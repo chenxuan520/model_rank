@@ -86,6 +86,8 @@ const BRAND_MAP = [
   ["chatglm", "glm"],
   ["zhipu", "glm"],
   ["智谱", "glm"],
+  ["zai", "glm"],
+  ["z.ai", "glm"],
   ["cursor", "cursor"],
 ];
 
