@@ -104,7 +104,7 @@ const ICON_OPTIONS = [
   ["qwen-icon", "Qwen 通义千问"],
   ["kimi", "Kimi 月之暗面"],
   ["doubao", "豆包 Doubao"],
-  ["glm", "GLM 智谱"],
+  ["glm", "GLM / 智谱 / Z.ai"],
   ["cursor", "Cursor"],
 ];
 
