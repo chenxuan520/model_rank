@@ -937,8 +937,8 @@ input[type="month"].panel-name-input {
   }
 
   .board-inner {
-    height: 68vh;
-    min-height: 420px;
+    height: 78vh;
+    min-height: 500px;
     border-radius: 14px;
   }
   .axis-y-caption { left: 4px; font-size: 11px; }
@@ -1035,8 +1035,8 @@ input[type="month"].panel-name-input {
 
 @media (max-width: 420px) {
   .board-inner {
-    height: 62vh;
-    min-height: 380px;
+    height: 72vh;
+    min-height: 440px;
   }
   .block-tags { display: none; } /* reduce clutter on very small screens */
 }
