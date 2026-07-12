@@ -35,9 +35,18 @@
   <aside id="panel" class="panel" hidden>
     <button id="panelClose" class="panel-close" aria-label="关闭">×</button>
     <div class="panel-head">
-      <h2 id="panelName" class="panel-name"></h2>
+      <div class="panel-title-row">
+        <img id="panelIcon" class="panel-icon" alt="" />
+        <h2 id="panelName" class="panel-name"></h2>
+      </div>
       <input id="panelNameInput" class="panel-name-input edit-only" hidden />
     </div>
+
+    <section class="panel-section edit-only" hidden>
+      <h3>图标</h3>
+      <input id="panelLogoInput" class="panel-name-input" placeholder="留空=按名字自动识别；也可填图标名或图片URL" />
+      <div class="logo-hint">已内置：openai / claude / gemini / llama / mistral / deepseek / grok / qwen / nvidia 等，按模型名自动匹配。</div>
+    </section>
 
     <section class="panel-section">
       <h3>标签</h3>

@@ -31,6 +31,98 @@ function getModel(id) {
   return board.models.find((m) => m.id === id);
 }
 
+// ---------- Brand icons ----------
+// Auto-detect a vendor logo from the model name. Icons are bundled locally in
+// /icons (colored brand SVGs). Falls back to a colored letter avatar so every
+// model always shows something on the left.
+const ICON_BASE = "icons/";
+
+// keyword (lowercased, matched as substring) -> local icon file (no extension)
+const BRAND_MAP = [
+  ["gpt", "openai-icon"],
+  ["openai", "openai-icon"],
+  ["o1", "openai-icon"],
+  ["o3", "openai-icon"],
+  ["chatgpt", "openai-icon"],
+  ["claude", "claude-icon"],
+  ["anthropic", "anthropic-icon"],
+  ["gemini", "gemini-star"],
+  ["palm", "gemini-star"],
+  ["google", "gemini-star"],
+  ["llama", "meta-icon"],
+  ["meta", "meta-icon"],
+  ["mistral", "mistral-ai-icon"],
+  ["mixtral", "mistral-ai-icon"],
+  ["deepseek", "deepseek-icon"],
+  ["grok", "grok-icon"],
+  ["qwen", "qwen-icon"],
+  ["通义", "qwen-icon"],
+  ["千问", "qwen-icon"],
+  ["kimi", "kimi"],
+  ["moonshot", "kimi"],
+  ["月之暗面", "kimi"],
+  ["doubao", "doubao"],
+  ["豆包", "doubao"],
+  ["glm", "glm"],
+  ["chatglm", "glm"],
+  ["zhipu", "glm"],
+  ["智谱", "glm"],
+  ["phi", "microsoft-icon"],
+  ["copilot", "microsoft-icon"],
+  ["nvidia", "nvidia-mark"],
+  ["nemotron", "nvidia-mark"],
+  ["hugging", "hugging-face-icon"],
+];
+
+// brand -> accent color for the letter-avatar fallback
+const FALLBACK_COLORS = ["#6d8bff", "#34d399", "#f59e0b", "#ec4899", "#22d3ee", "#a78bfa", "#f2555a"];
+
+function brandSlug(name) {
+  const n = (name || "").toLowerCase();
+  for (const [kw, slug] of BRAND_MAP) {
+    if (n.includes(kw)) return slug;
+  }
+  return null;
+}
+
+function letterAvatar(name) {
+  const ch = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const color = FALLBACK_COLORS[Math.abs(h) % FALLBACK_COLORS.length];
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">` +
+    `<rect width="28" height="28" rx="7" fill="${color}"/>` +
+    `<text x="14" y="19" font-size="15" font-family="Inter,Arial,sans-serif" font-weight="700" ` +
+    `fill="#0b0c10" text-anchor="middle">${ch}</text></svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+// Resolve the best icon URL for a model. `logo` on the model overrides
+// auto-detection: it can be a full URL, or a bare iconify "logos" slug.
+function iconUrl(m) {
+  if (m.logo) {
+    if (/^https?:\/\//.test(m.logo) || m.logo.startsWith("data:")) return m.logo;
+    return ICON_BASE + m.logo + ".svg";
+  }
+  const slug = brandSlug(m.name);
+  return slug ? ICON_BASE + slug + ".svg" : letterAvatar(m.name);
+}
+
+// Build an <img> icon element that falls back to a letter avatar on load error.
+function makeIcon(m, cls) {
+  const img = document.createElement("img");
+  img.className = cls;
+  img.src = iconUrl(m);
+  img.alt = "";
+  img.loading = "lazy";
+  img.addEventListener("error", () => {
+    img.onerror = null;
+    img.src = letterAvatar(m.name);
+  });
+  return img;
+}
+
 // ---------- Load ----------
 async function load() {
   const res = await fetch("/api/data");
@@ -81,15 +173,47 @@ function renderBlocks() {
     el.dataset.id = m.id;
     el.style.left = m.x * 100 + "%";
     el.style.top = (1 - m.y) * 100 + "%";
+    applyTier(el, m);
 
+    const head = document.createElement("div");
+    head.className = "block-head";
+    head.appendChild(makeIcon(m, "block-icon"));
     const name = document.createElement("span");
     name.className = "block-name";
     name.textContent = m.name || "(未命名)";
-    el.appendChild(name);
+    head.appendChild(name);
+    el.appendChild(head);
+
+    if (m.tags && m.tags.length) {
+      const tagWrap = document.createElement("div");
+      tagWrap.className = "block-tags";
+      for (const t of m.tags.slice(0, 4)) {
+        const tag = document.createElement("span");
+        tag.className = "block-tag";
+        tag.textContent = t;
+        tagWrap.appendChild(tag);
+      }
+      el.appendChild(tagWrap);
+    }
 
     el.addEventListener("pointerdown", onBlockPointerDown);
     boardInner.appendChild(el);
   }
+}
+
+// Color a block by whether it sits above (production-grade) or below the line.
+function applyTier(el, m) {
+  const prod = m.y >= board.productionLineY;
+  el.classList.toggle("tier-prod", prod);
+  el.classList.toggle("tier-sub", !prod);
+}
+
+// Re-evaluate every block's tier (used while dragging the line or a block).
+function refreshTiers() {
+  boardInner.querySelectorAll(".block").forEach((el) => {
+    const m = getModel(el.dataset.id);
+    if (m) applyTier(el, m);
+  });
 }
 
 function renderLine() {
@@ -136,6 +260,7 @@ function onBlockPointerMove(e) {
   if (m) {
     m.x = x;
     m.y = y;
+    applyTier(drag.el, m); // recolor live as it crosses the line
   }
 }
 
@@ -162,6 +287,7 @@ prodLine.addEventListener("pointerdown", (e) => {
     const y = clamp01(1 - (ev.clientY - rect.top) / rect.height);
     board.productionLineY = y;
     renderLine();
+    refreshTiers(); // blocks may cross the line as it moves
   };
   const up = () => {
     window.removeEventListener("pointermove", move);
@@ -181,10 +307,23 @@ function openPanel(id) {
   document.getElementById("panelName").textContent = m.name || "(未命名)";
   const nameInput = document.getElementById("panelNameInput");
   nameInput.value = m.name || "";
+  const logoInput = document.getElementById("panelLogoInput");
+  logoInput.value = m.logo || "";
+  updatePanelIcon(m);
 
   renderTags(m);
   renderComments(m);
   panel.hidden = false;
+}
+
+// Refresh the panel header icon for a model (with letter-avatar fallback).
+function updatePanelIcon(m) {
+  const icon = document.getElementById("panelIcon");
+  icon.onerror = () => {
+    icon.onerror = null;
+    icon.src = letterAvatar(m.name);
+  };
+  icon.src = iconUrl(m);
 }
 
 function closePanel() {
@@ -219,6 +358,12 @@ function renderComments(m) {
   list.innerHTML = "";
   // newest first
   const sorted = [...m.comments].sort((a, b) => b.createdAt - a.createdAt);
+  if (sorted.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "comment-empty";
+    empty.textContent = "还没有评论。";
+    list.appendChild(empty);
+  }
   for (const c of sorted) {
     const li = document.createElement("li");
     li.className = "comment-item";
@@ -313,6 +458,17 @@ document.getElementById("panelNameInput").addEventListener("input", (e) => {
   if (!m) return;
   m.name = e.target.value;
   document.getElementById("panelName").textContent = m.name || "(未命名)";
+  updatePanelIcon(m); // name may change the auto-detected icon
+  renderBlocks();
+  scheduleSave();
+});
+
+// set icon override (blank = auto-detect from name)
+document.getElementById("panelLogoInput").addEventListener("input", (e) => {
+  const m = getModel(selectedId);
+  if (!m) return;
+  m.logo = e.target.value.trim();
+  updatePanelIcon(m);
   renderBlocks();
   scheduleSave();
 });
