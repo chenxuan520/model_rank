@@ -1,6 +1,8 @@
 # model_rank
 
-个人主观的大模型测评榜。默认只读；输入密码后进入编辑态，可以增删/拖动模型方块、拖动「生产级别线」、打标签、写带时间线的评论。
+个人主观的大模型测评榜。默认只读；输入密码后进入编辑态，可以增删/拖动模型方块、拖动多条基准线（含「生产级别线」）、打标签、写带时间线的评论。
+
+> 接手开发请先读 [HANDOFF.md](./HANDOFF.md)：里面有当前部署状态、账号/密码/KV 坐标、数据结构和**未完成的待办**。
 
 - 前端：原生 HTML/CSS/JS（`public/`）
 - 后端：Cloudflare Pages Functions（`functions/api/`）
@@ -12,12 +14,13 @@
 - 纵轴 = 评价高低，方块拖得越高越强。
 - 横轴 = 自由摆放，仅避免重叠，无额外含义。
 - 一条可拖动的「生产级别线」：线以上=可上生产，线以下=还不够格。
+- 可再加任意多条自定义「基准线」，每条可拖高低、左侧带自定义文字标签。
 
 ## 本地开发
 
 ```bash
 npm install
-# 本地密码写在 .dev.vars（已 gitignore）：EDIT_PASSWORD="dev-password"
+# 本地密码写在 .dev.vars（已 gitignore）：EDIT_PASSWORD="123456"
 npx wrangler pages dev
 ```
 

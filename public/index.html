@@ -8,9 +8,13 @@
 </head>
 <body>
   <header class="topbar">
-    <h1 class="title">大模型测评榜</h1>
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <h1 class="title">大模型测评榜</h1>
+    </div>
     <div class="topbar-right">
       <span id="saveStatus" class="save-status"></span>
+      <button id="addLineBtn" class="btn edit-only" hidden>+ 基准线</button>
       <button id="addBtn" class="btn edit-only" hidden>+ 添加模型</button>
       <button id="loginBtn" class="btn">编辑</button>
       <button id="logoutBtn" class="btn edit-only" hidden>退出编辑</button>
@@ -18,13 +22,20 @@
   </header>
 
   <main>
-    <!-- The board. Blocks are absolutely positioned inside .board-inner. -->
+    <!-- Hero -->
+    <div class="hero">
+      <h2 class="hero-title">THE&nbsp;RANKING</h2>
+      <p class="hero-sub">主观 · 实测 · 段位划分　—　线以上，方可上生产</p>
+    </div>
+
+    <!-- The board. Blocks and lines are absolutely positioned inside .board-inner. -->
     <div id="board" class="board">
       <div id="boardInner" class="board-inner">
-        <div class="axis-label axis-top">强</div>
-        <div class="axis-label axis-bottom">弱</div>
-        <div id="prodLine" class="prod-line">
-          <span class="prod-line-label">生产级别线</span>
+        <div class="axis-label axis-top">强 · S 段</div>
+        <div class="axis-label axis-bottom">弱 · 淘汰区</div>
+        <!-- custom baseline lines injected here -->
+        <div id="prodLine" class="prod-line prod-line--main">
+          <span class="line-label prod-line-label"></span>
         </div>
         <!-- model blocks injected here -->
       </div>
@@ -44,8 +55,13 @@
 
     <section class="panel-section edit-only" hidden>
       <h3>图标</h3>
-      <input id="panelLogoInput" class="panel-name-input" placeholder="留空=按名字自动识别；也可填图标名或图片URL" />
-      <div class="logo-hint">已内置：openai / claude / gemini / llama / mistral / deepseek / grok / qwen / nvidia 等，按模型名自动匹配。</div>
+      <select id="panelLogoSelect" class="panel-select">
+        <option value="">自动识别（按名字）</option>
+        <!-- built-in icon options injected here -->
+        <option value="__custom__">自定义图片 URL…</option>
+      </select>
+      <input id="panelLogoInput" class="panel-name-input" placeholder="粘贴图片 URL" hidden />
+      <div class="logo-hint">选“自动识别”会根据模型名匹配内置 logo；也可直接指定或填自定义图片。</div>
     </section>
 
     <section class="panel-section">

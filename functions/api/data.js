@@ -7,6 +7,10 @@ function defaultBoard() {
   const now = Date.now();
   return {
     productionLineY: 0.6,
+    productionLineLabel: "生产级别线",
+    lines: [
+      { id: "l_base", y: 0.45, label: "第一梯队基准线" },
+    ],
     models: [
       {
         id: "m_gpt",
@@ -99,8 +103,18 @@ function sanitize(board) {
       : [],
   }));
 
+  const lines = Array.isArray(board.lines)
+    ? board.lines.slice(0, 30).map((l) => ({
+        id: str(l.id) || "l_" + Math.random().toString(36).slice(2, 9),
+        y: clamp01(l.y),
+        label: str(l.label),
+      }))
+    : [];
+
   return {
     productionLineY: clamp01(board.productionLineY),
+    productionLineLabel: str(board.productionLineLabel) || "生产级别线",
+    lines,
     models,
   };
 }
