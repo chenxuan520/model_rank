@@ -16,6 +16,10 @@ let selectedId = null; // panel-focused model
 let selectedIds = new Set(); // multi-select for group drag
 let modelClipboard = []; // in-memory copies for Ctrl/Cmd+C/V
 let saveTimer = null;
+const MAX_UNDO_STEPS = 60;
+let undoHistory = [];
+let undoCursor = -1;
+let isUndoing = false;
 
 const DEFAULT_PROD_COLOR = "#ff5b6a";
 const LINE_COLOR_PRESETS = ["#8caaff", "#34d399", "#f59e0b", "#a78bfa", "#22d3ee", "#ec4899", "#f97316"];
@@ -330,6 +334,18 @@ function normalizeClientStore(data) {
   return { activeId: one.id, boards: [one] };
 }
 
+function hydrateStoreAndBoardFromCurrentState() {
+  if (!Array.isArray(store.boards) || !store.boards.length) {
+    const one = emptyBoard("默认榜");
+    store = { activeId: one.id, boards: [one] };
+  }
+  if (!store.activeId || !store.boards.some((b) => b.id === store.activeId)) {
+    store.activeId = store.boards[0].id;
+  }
+  for (const b of store.boards) hydrateBoard(b);
+  board = activeBoard();
+}
+
 function hydrateBoard(b) {
   if (typeof b.productionLineLabel !== "string") b.productionLineLabel = "生产级别线";
   b.productionLineColor = normalizeHexColor(b.productionLineColor, DEFAULT_PROD_COLOR);
@@ -382,14 +398,16 @@ async function load() {
   const res = await fetch("/api/data");
   const data = await res.json();
   store = normalizeClientStore(data);
-  if (!store.boards.some((b) => b.id === store.activeId)) {
-    store.activeId = store.boards[0].id;
-  }
-  board = activeBoard();
-  hydrateBoard(board);
+  hydrateStoreAndBoardFromCurrentState();
   syncBoardSelect();
   render();
   await restoreSession();
+  initUndoHistory();
+}
+
+function initUndoHistory() {
+  undoHistory = [buildUndoSnapshot()];
+  undoCursor = 0;
 }
 
 // If the HttpOnly auth cookie is still valid, re-enter edit mode without retyping password.
@@ -402,9 +420,65 @@ async function restoreSession() {
   }
 }
 
+function buildUndoSnapshot(targetStore = store) {
+  const raw = JSON.stringify(targetStore);
+  return { raw, state: JSON.parse(raw) };
+}
+
+function pushUndoHistory() {
+  if (!editing) return;
+  if (isUndoing) return;
+  const next = buildUndoSnapshot();
+  const current = undoHistory[undoCursor];
+
+  if (current && current.raw === next.raw) return;
+
+  if (undoCursor < undoHistory.length - 1) {
+    undoHistory = undoHistory.slice(0, undoCursor + 1);
+  }
+
+  undoHistory.push(next);
+  if (undoHistory.length > MAX_UNDO_STEPS) {
+    undoHistory.shift();
+  }
+  undoCursor = undoHistory.length - 1;
+}
+
+function applyUndoState(snapshot) {
+  if (!snapshot) return;
+  isUndoing = true;
+  try {
+    store = JSON.parse(JSON.stringify(snapshot.state));
+    hydrateStoreAndBoardFromCurrentState();
+    const previousPanelModel = !panel.hidden && selectedId ? selectedId : "";
+    const hadPanel = !panel.hidden;
+
+    selectedId = null;
+    clearSelection();
+    closePanel();
+    syncBoardSelect();
+    render();
+    if (hadPanel && previousPanelModel && getModel(previousPanelModel)) {
+      openPanel(previousPanelModel);
+    }
+  } finally {
+    isUndoing = false;
+  }
+}
+
+function undoLastAction() {
+  if (!editing || isUndoing) return false;
+  if (undoCursor <= 0) return false;
+  undoCursor -= 1;
+  applyUndoState(undoHistory[undoCursor]);
+  saveStatus.textContent = "已撤销";
+  return true;
+}
+
 // ---------- Save (debounced) ----------
 function scheduleSave() {
   if (!editing) return;
+  pushUndoHistory();
   saveStatus.textContent = "…";
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 600);
@@ -1493,7 +1567,12 @@ document.addEventListener("keydown", (e) => {
   if (!mod) return;
 
   const key = e.key.toLowerCase();
-  if (key === "c") {
+  if (key === "z" && !e.shiftKey) {
+    e.preventDefault();
+    if (!undoLastAction()) {
+      saveStatus.textContent = "暂无可撤销的更改";
+    }
+  } else if (key === "c") {
     if (copySelectedModels()) e.preventDefault();
   } else if (key === "v") {
     if (pasteModels()) e.preventDefault();
