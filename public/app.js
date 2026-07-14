@@ -20,6 +20,7 @@ const MAX_UNDO_STEPS = 60;
 let undoHistory = [];
 let undoCursor = -1;
 let isUndoing = false;
+let confirmResolver = null;
 
 const DEFAULT_PROD_COLOR = "#ff5b6a";
 const LINE_COLOR_PRESETS = ["#8caaff", "#34d399", "#f59e0b", "#a78bfa", "#22d3ee", "#ec4899", "#f97316"];
@@ -29,6 +30,12 @@ const boardInner = document.getElementById("boardInner");
 const prodLine = document.getElementById("prodLine");
 const panel = document.getElementById("panel");
 const saveStatus = document.getElementById("saveStatus");
+const confirmModal = document.getElementById("confirmModal");
+const confirmTitleEl = document.getElementById("confirmTitle");
+const confirmMessageEl = document.getElementById("confirmMessage");
+const confirmCancelBtn = document.getElementById("confirmCancelBtn");
+const confirmSubmitBtn = document.getElementById("confirmSubmitBtn");
+const confirmIconEl = document.getElementById("confirmIcon");
 
 // ---------- Utilities ----------
 function uid(prefix) {
@@ -691,19 +698,25 @@ function renderCustomLines() {
       scheduleSave();
     });
 
-    if (editing) {
-      const del = document.createElement("span");
-      del.className = "line-del";
-      del.textContent = "×";
-      del.title = "删除这条线";
-      del.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        board.lines = board.lines.filter((x) => x.id !== ln.id);
-        renderCustomLines();
-        scheduleSave();
+  if (editing) {
+    const del = document.createElement("span");
+    del.className = "line-del";
+    del.textContent = "×";
+    del.title = "删除这条线";
+    del.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const ok = await showConfirmModal({
+        title: "删除基准线",
+        message: `确认删除基准线「${ln.label || "基准线"}」？`,
+        confirmText: "删除",
       });
-      el.appendChild(del);
-    }
+      if (!ok) return;
+      board.lines = board.lines.filter((x) => x.id !== ln.id);
+      renderCustomLines();
+      scheduleSave();
+    });
+    el.appendChild(del);
+  }
 
     el.addEventListener("pointerdown", (ev) => {
       startLineDrag(
@@ -748,10 +761,96 @@ function isTypingTarget(el) {
   return false;
 }
 
+function closeConfirmModal() {
+  confirmResolver = null;
+  if (confirmModal) confirmModal.hidden = true;
+}
+
+function resolveConfirm(result) {
+  if (typeof confirmResolver !== "function") return;
+  const done = confirmResolver;
+  confirmResolver = null;
+  closeConfirmModal();
+  done(result);
+}
+
+function showConfirmModal({
+  title = "确认",
+  message = "",
+  confirmText = "确认",
+  cancelText = "取消",
+  isDanger = true,
+} = {}) {
+  if (!confirmModal) return Promise.resolve(false);
+  if (typeof confirmResolver === "function") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+    confirmTitleEl.textContent = title;
+    confirmMessageEl.textContent = message;
+    confirmCancelBtn.textContent = cancelText;
+    confirmSubmitBtn.textContent = confirmText;
+    confirmIconEl?.classList.remove("danger", "neutral");
+    if (isDanger) {
+      confirmIconEl?.classList.add("danger");
+      if (confirmIconEl) confirmIconEl.textContent = "!";
+    } else {
+      confirmIconEl?.classList.add("neutral");
+      if (confirmIconEl) confirmIconEl.textContent = "i";
+    }
+    confirmSubmitBtn.className = "btn";
+    if (isDanger) {
+      confirmSubmitBtn.classList.add("btn-danger");
+    } else {
+      confirmSubmitBtn.classList.add("btn-primary");
+    }
+    confirmCancelBtn.disabled = false;
+    confirmSubmitBtn.disabled = false;
+    confirmModal.hidden = false;
+    confirmSubmitBtn.focus();
+  });
+}
+
+confirmCancelBtn.addEventListener("click", () => resolveConfirm(false));
+confirmSubmitBtn.addEventListener("click", () => resolveConfirm(true));
+confirmModal.addEventListener("pointerdown", (e) => {
+  if (e.target === confirmModal) resolveConfirm(false);
+});
+
 function idsForClipboard() {
   if (selectedIds.size) return [...selectedIds];
   if (selectedId) return [selectedId];
   return [];
+}
+
+function selectedModelIds() {
+  const ids = idsForClipboard();
+  return ids.filter((id) => !!getModel(id));
+}
+
+function selectAllModels() {
+  setSelection(board.models.map((m) => m.id));
+}
+
+async function deleteSelectedModels() {
+  const ids = selectedModelIds();
+  if (!ids.length) return false;
+  const confirmMsg = ids.length === 1
+    ? "确认删除该模型？"
+    : `确认删除这 ${ids.length} 个模型？`;
+  const ok = await showConfirmModal({
+    title: "删除模型",
+    message: confirmMsg,
+    confirmText: "删除",
+  });
+  if (!ok) return false;
+  const set = new Set(ids);
+  board.models = board.models.filter((m) => !set.has(m.id));
+  selectedIds.clear();
+  selectedId = null;
+  closePanel();
+  renderBlocks();
+  scheduleSave();
+  return true;
 }
 
 function snapshotModel(m) {
@@ -1250,10 +1349,15 @@ function renderComments(m) {
       const delBtn = document.createElement("span");
       delBtn.className = "comment-del-btn";
       delBtn.textContent = "删除";
-      delBtn.addEventListener("click", () => {
+      delBtn.addEventListener("click", async () => {
         const preview = (c.text || "").trim().slice(0, 20);
         const tip = preview ? "「" + preview + (c.text.trim().length > 20 ? "…" : "") + "」" : "这条评论";
-        if (!confirm("确认删除评论" + tip + "？")) return;
+        const ok = await showConfirmModal({
+          title: "删除评论",
+          message: "确认删除评论" + tip + "？",
+          confirmText: "删除",
+        });
+        if (!ok) return;
         m.comments = m.comments.filter((x) => x.id !== c.id);
         renderComments(m);
         scheduleSave();
@@ -1389,10 +1493,15 @@ document.getElementById("panelLogoInput").addEventListener("input", (e) => {
 });
 
 // delete model
-document.getElementById("deleteModelBtn").addEventListener("click", () => {
+document.getElementById("deleteModelBtn").addEventListener("click", async () => {
   const m = getModel(selectedId);
   if (!m) return;
-  if (!confirm("确认删除模型「" + (m.name || "未命名") + "」？")) return;
+  const ok = await showConfirmModal({
+    title: "删除模型",
+    message: "确认删除模型「" + (m.name || "未命名") + "」？",
+    confirmText: "删除",
+  });
+  if (!ok) return;
   board.models = board.models.filter((x) => x.id !== selectedId);
   selectedIds.delete(selectedId);
   closePanel();
@@ -1457,13 +1566,23 @@ document.getElementById("renameBoardBtn").addEventListener("click", () => {
   scheduleSave();
 });
 
-document.getElementById("deleteBoardBtn").addEventListener("click", () => {
+document.getElementById("deleteBoardBtn").addEventListener("click", async () => {
   if (!editing || !board) return;
   if (store.boards.length <= 1) {
-    alert("至少保留一个榜单");
+    await showConfirmModal({
+      title: "提示",
+      message: "至少保留一个榜单",
+      confirmText: "我知道了",
+      isDanger: false,
+    });
     return;
   }
-  if (!confirm("确认删除榜单「" + (board.name || "未命名") + "」？其中的模型也会一起删掉。")) return;
+  const ok = await showConfirmModal({
+    title: "删除榜单",
+    message: "确认删除榜单「" + (board.name || "未命名") + "」？其中的模型也会一起删掉。",
+    confirmText: "删除",
+  });
+  if (!ok) return;
   const doomed = board.id;
   store.boards = store.boards.filter((b) => b.id !== doomed);
   const next = store.boards[0];
@@ -1548,6 +1667,20 @@ loginModal.addEventListener("pointerdown", (e) => {
 
 // Esc / copy / paste shortcuts (edit mode)
 document.addEventListener("keydown", (e) => {
+  if (confirmModal && !confirmModal.hidden) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeConfirmModal();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      resolveConfirm(true);
+      return;
+    }
+    return;
+  }
+
   if (e.key === "Escape") {
     if (!loginModal.hidden) {
       closeLoginModal();
@@ -1563,6 +1696,13 @@ document.addEventListener("keydown", (e) => {
 
   if (!editing) return;
   if (isTypingTarget(e.target)) return;
+
+  if (e.key === "Delete" || e.key === "Backspace") {
+    e.preventDefault();
+    deleteSelectedModels();
+    return;
+  }
+
   const mod = e.metaKey || e.ctrlKey;
   if (!mod) return;
 
@@ -1572,6 +1712,9 @@ document.addEventListener("keydown", (e) => {
     if (!undoLastAction()) {
       saveStatus.textContent = "暂无可撤销的更改";
     }
+  } else if (key === "a" && !e.shiftKey) {
+    e.preventDefault();
+    selectAllModels();
   } else if (key === "c") {
     if (copySelectedModels()) e.preventDefault();
   } else if (key === "v") {
