@@ -183,6 +183,29 @@ body::after {
 }
 .btn:hover { background: var(--surface-hi); border-color: var(--border-hi); }
 .btn:active { transform: translateY(1px); }
+
+.github-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  transition: background 0.16s, border-color 0.16s;
+  text-decoration: none;
+}
+.github-icon-link:hover {
+  background: var(--surface-hi);
+  border-color: var(--border-hi);
+}
+.github-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), #566fe0);
   border-color: transparent;
@@ -507,15 +530,6 @@ body.editing .board-inner {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(52, 211, 153, 0.12), 0 0 22px var(--prod-glow);
 }
 .block.tier-prod .block-name { color: #d6fff0; }
-.block.tier-prod::after {
-  content: "";
-  position: absolute;
-  top: -4px; right: -4px;
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: var(--prod);
-  box-shadow: 0 0 10px var(--prod-glow);
-}
 .block.tier-sub { opacity: 0.92; }
 .block.tier-sub .block-name { color: #c3c8d6; }
 
